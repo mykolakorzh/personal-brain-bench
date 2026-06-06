@@ -97,19 +97,29 @@ A simple Markdown table in `results/SCOREBOARD.md`, updated with each run. Highe
 - **Not closed.** Questions are open; corpus is open; rubric is open. Anyone can rerun, fork, or extend.
 - **Not a leaderboard chase.** The questions exist to surface architecture choices, not to be optimized against. Benchmark hacking via memorization is detectable (we publish question hashes that vendors should NOT see at training time — see `CONTRIBUTING.md`).
 
-## v0.1 scope
+## v0.1 scope and known limits
 
-This first release is a **proof-of-concept**, not a complete benchmark:
+This first release is a **proof-of-concept**, not a complete benchmark.
 
+Shipped:
 - ✅ Methodology + category definitions
-- ✅ 30-fact seed corpus
+- ✅ 30-fact seed corpus with bi-temporal lifecycles and supersession chains
 - ✅ ~40 questions across 6 categories (will grow to 200 by v1.0)
-- ✅ Strict grader (machine-checkable)
-- ⏳ Semantic grader scaffold (needs LLM API key to run)
-- ⏳ Live korzh runner (waits for korzh API key unlock)
-- ⏳ Community runners (Mem0, Letta, Zep) — PR welcome
+- ✅ Strict grader (machine-checkable, F1 over fact-id sets)
+- ✅ Raw-LLM baseline runner + korzh runner with per-category retrieval
 
-By v1.0 (target 2026-Q4): 200 questions, scored runs from 3+ vendor systems, peer-reviewed methodology.
+In-flight:
+- ⏳ Semantic LLM-judge grader scaffold (rubric present; needs API key to score)
+- ⏳ Community runners (Mem0, Letta, Zep, Cognee, Anthropic Memory Files) — PR welcome
+
+**Known limits of v0.1 (read this before drawing conclusions from scores):**
+
+1. **Small-corpus regime.** The seed corpus is 30 facts. Both runners receive contexts well under any modern LLM's window. The *retrieval* contribution of an architecture only starts to matter past the context window — so v0.1 scores will under-state architecture differences at scale. The `MAX_FACTS_TO_LLM` cap in runners is a forward-looking knob, not a current bottleneck.
+2. **Vocabulary category measures vocabulary discipline, not retrieval.** Questions like "is `created` synonymous with `builds`" are answered from the runner's predicate dictionary or general LLM knowledge, not from corpus search. The korzh runner deliberately passes an empty candidate set here so the score reflects intrinsic predicate knowledge.
+3. **First-pass korzh runner (v0.1.0, 2026-06-06) was indistinguishable from raw-LLM** — it returned the full corpus for most categories. **v0.1.1 (same day) fixes this:** per-category retrieval walks supersedes chains for supersession queries, sorts by confidence for confidence queries, expands one-hop for cross-fact queries, and pre-filters bi-temporal queries by `as_of_date` validity. See `runners/korzh.ts` header for the honest scope statement.
+4. **Adversarial reviewers and benchmark hackers welcome.** If you find a question whose `expected_facts` set is reachable only via a method you find epistemically dubious, file an issue.
+
+By v1.0 (target 2026-Q4): 200 questions, scored runs from 3+ vendor systems, peer-reviewed methodology paper.
 
 ## How to run
 
