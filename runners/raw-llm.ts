@@ -23,6 +23,7 @@ interface Question {
   id: string;
   question: string;
   as_of_date?: string;
+  category?: string;
 }
 
 interface RunResult {
@@ -42,25 +43,32 @@ function loadCorpus(): string {
   return readFileSync(factsPath, 'utf8');
 }
 
-async function callLlm(question: Question, corpus: string): Promise<RunResult> {
+function loadSagas(): string {
+  const sagasPath = join(ROOT, 'corpus', 'sagas.jsonl');
+  try { return readFileSync(sagasPath, 'utf8'); } catch { return ''; }
+}
+
+async function callLlm(question: Question, corpus: string, sagas: string): Promise<RunResult> {
   if (!process.env.ANTHROPIC_API_KEY) {
-    // Stub mode — return empty answer for now. Real LLM mode unlocks when key arrives.
-    return { id: question.id, answer: '(stub — no api key)', facts_used: [] };
+    return { id: question.id, answer: '(stub - no api key)', facts_used: [] };
   }
   const Anthropic = (await import('@anthropic-ai/sdk')).default;
   const client = new Anthropic();
 
   const sys = [
     'You are answering a question about a fictional person (Alex) based ONLY on the facts.jsonl shown.',
-    'Each fact has an id, subject, predicate, object, t_valid, t_invalid, confidence.',
+    'Each fact has an id (e.g. f_corpus_001), subject, predicate, object, t_valid, t_invalid, confidence, source, supersedes (id of the fact this revises), saga_id (rollup group).',
     'A fact is "true as of date D" iff t_valid <= D AND (t_invalid is null OR D < t_invalid).',
+    'If asked "what did X originally decide before revising" — follow the supersedes pointer chain (find a fact whose id appears as another fact\'s supersedes).',
+    'If asked about provenance, the source field is authoritative.',
     'Return JSON: {"answer": "<short answer>", "facts_used": ["<id1>", "<id2>"]}.',
-    'Cite fact ids you used. Be precise. If as_of_date is given, respect bi-temporal validity.',
+    'facts_used MUST contain the fact ids you actually used. Be precise. If as_of_date is given, respect bi-temporal validity strictly.',
   ].join(' ');
 
   const userMsg = [
     `# Facts (jsonl)`,
     corpus,
+    sagas ? '\n# Sagas (rollup summaries)\n' + sagas : '',
     '',
     `# Question`,
     question.question,
@@ -69,8 +77,9 @@ async function callLlm(question: Question, corpus: string): Promise<RunResult> {
     'Respond with JSON only.',
   ].join('\n');
 
+  const model = process.env.PBB_MODEL ?? 'claude-haiku-4-5-20251001';
   const resp = await client.messages.create({
-    model: process.env.PBB_MODEL ?? 'claude-haiku-4-5-20251001',
+    model,
     max_tokens: 512,
     system: sys,
     messages: [{ role: 'user', content: userMsg }],
@@ -80,7 +89,6 @@ async function callLlm(question: Question, corpus: string): Promise<RunResult> {
   for (const b of resp.content) {
     if (b.type === 'text') text += b.text;
   }
-  // strip code fences if present
   text = text.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim();
   try {
     const parsed = JSON.parse(text) as { answer: string; facts_used: string[] };
@@ -102,8 +110,12 @@ async function main() {
     try { questions.push(JSON.parse(line) as Question); } catch { /* skip */ }
   }
   const corpus = loadCorpus();
+  const sagas = loadSagas();
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.error('warning: ANTHROPIC_API_KEY not set; emitting stub results');
+  }
   for (const q of questions) {
-    const r = await callLlm(q, corpus);
+    const r = await callLlm(q, corpus, sagas);
     console.log(JSON.stringify(r));
   }
 }
