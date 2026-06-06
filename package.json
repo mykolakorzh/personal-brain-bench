@@ -1,0 +1,18 @@
+{
+  "name": "personal-brain-bench",
+  "version": "0.1.0",
+  "description": "A public benchmark for personal-AI memory systems. Bi-temporal, provenance-aware, supersession-tracking.",
+  "type": "module",
+  "private": false,
+  "license": "MIT",
+  "scripts": {
+    "grade": "bun run grader/strict.ts",
+    "run:korzh": "bun run runners/korzh.ts",
+    "run:raw-llm": "bun run runners/raw-llm.ts",
+    "list-questions": "wc -l questions/*.jsonl"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "typescript": "5.9.3"
+  }
+}
